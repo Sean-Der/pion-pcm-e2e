@@ -1,0 +1,67 @@
+<html>
+  <head>
+    <title>pion-pcm-e2e</title>
+  </head>
+
+  <body>
+    <button onclick="doSendAudio()"> Send Audio </button>
+    <button onclick="doReceiveAudio()"> Receive Audio </button>
+    <br />
+
+    <h3> Audio </h3>
+    <audio id="audioPlayer" autoplay controls> </audio>
+
+
+    <h3> ICE Connection States </h3>
+    <div id="iceConnectionStates"></div> <br />
+  </body>
+
+  <script>
+    let peerConnection = new RTCPeerConnection()
+    peerConnection.addTransceiver('audio', { direction: 'recvonly' })
+
+    peerConnection.ontrack = function (event) {
+      document.getElementById('audioPlayer').srcObject = event.streams[0]
+    }
+
+    peerConnection.oniceconnectionstatechange = () => {
+      let el = document.createElement('p')
+      el.appendChild(document.createTextNode(peerConnection.iceConnectionState))
+
+      document.getElementById('iceConnectionStates').appendChild(el);
+    }
+
+    let doNegotiation = operation => {
+      peerConnection.createOffer().then(offer => {
+        peerConnection.setLocalDescription(offer)
+
+        fetch(`/doSignaling`, {
+          method: 'POST',
+          body: offer.sdp,
+          headers: {
+            'Content-Type': 'application/sdp',
+            'X-Operation': operation,
+          }
+        }).then(r => r.text())
+          .then(answer => {
+            peerConnection.setRemoteDescription({
+              sdp: answer,
+              type: 'answer'
+            })
+          })
+      })
+    };
+
+    window.doSendAudio = () => {
+      navigator.mediaDevices.getUserMedia({ video: false, audio: true })
+        .then(stream => {
+          stream.getTracks().forEach(track => peerConnection.addTrack(track, stream))
+          doNegotiation('send')
+        })
+    }
+
+    window.doReceiveAudio = () => {
+      doNegotiation('receive')
+    }
+  </script>
+</html>
